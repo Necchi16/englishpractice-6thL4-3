@@ -1,0 +1,148 @@
+<!-- ... existing code ... -->
+    const SUGGESTIONS = {
+      wentTo: ['うみ', 'おばあちゃんのいえ', 'ゆうえんち', 'キャンプ', 'プール', 'やま', 'としょかん'],
+      enjoyed: ['すいえい', 'ゲーム', 'むしとり', 'バーベキュー', 'はなび', 'しゅくだい', 'どくしょ'],
+      saw: ['はなび', 'ひまわり', 'かぶとむし', 'おまつり', 'うみ', 'ともだち'],
+      ate: ['かきごおり', 'スイカ', 'そうめん', 'カレー', 'アイスクリーム', 'おすし', 'バーベキュー'],
+      itWas: ['たのしかった (fun)', 'すごかった (amazing)', 'うつくしかった (beautiful)', 'おもしろかった (interesting)', 'かっこよかった (cool)', 'すばらしかった (great)', 'すてきだった (wonderful)']
+    };
+
+    const ITEM_LABELS = {
+      wentTo: { icon: '🚶‍♂️', title: 'どこに 行った？', enHint: '(went to)', prefix: 'I went to ', suffix: '.' },
+      enjoyed: { icon: '✨', title: 'なにを 楽しんだ？', enHint: '(enjoyed)', prefix: 'I enjoyed ', suffix: '.' },
+      saw: { icon: '👀', title: 'なにを 見た？', enHint: '(saw)', prefix: 'I saw ', suffix: '.' },
+      ate: { icon: '🍎', title: 'なにを 食べた？', enHint: '(ate)', prefix: 'I ate ', suffix: '.' },
+      itWas: { icon: '💭', title: 'どんな かんそう（気持ち）？', enHint: '(It was)', prefix: 'It was ', suffix: '.' }
+    };
+
+    const DISHES = [
+<!-- ... existing code ... -->
+      const handleTranslateAll = async () => {
+        if (!inputs.wentTo.trim() || !inputs.enjoyed.trim() || !inputs.saw.trim() || !inputs.ate.trim() || !inputs.itWas.trim()) {
+          alert("５つ すべて にゅうりょく してね！");
+          return;
+        }
+        setIsTranslating(true);
+        setFallbackMode(false);
+        
+        let isDone = false;
+        // 3秒タイマー
+        const fallbackTimer = setTimeout(() => {
+          if(!isDone) setFallbackMode(true);
+        }, 3000);
+
+        const getTrans = async (jaText, prefix, suffix) => {
+          if(!jaText) return "";
+          const cleanJa = jaText.replace(/\s*\(.*?\)\s*/g, ''); // カッコ内の英語を消して日本語だけにする
+          const query = `${prefix}${cleanJa}${suffix}`;
+          const en = await translateWithGAS(query);
+          return en;
+        };
+
+        const cleanTrans = (text, type) => {
+          if (!text) return "";
+          let s = text.trim();
+          s = s.replace(/[\.\,\!]+$/, '').trim(); // 末尾のピリオドなどを削除
+          if (type === 'wentTo') s = s.replace(/^i went to /i, '').replace(/^i visited /i, '');
+          if (type === 'enjoyed') s = s.replace(/^i enjoyed /i, '').replace(/^i had fun /i, '');
+          if (type === 'saw') s = s.replace(/^i saw /i, '').replace(/^i watched /i, '').replace(/^i looked at /i, '');
+          if (type === 'ate') s = s.replace(/^i ate /i, '').replace(/^i had /i, '');
+          if (type === 'itWas') s = s.replace(/^it was /i, '').replace(/^it is /i, '').replace(/^they were /i, '');
+          return s.trim() || "something";
+        };
+
+        try {
+          let wentToEn = await getTrans(inputs.wentTo, "私は", "に行きました。");
+          let enjoyedEn = await getTrans(inputs.enjoyed, "私は", "を楽しみました。");
+          let sawEn = await getTrans(inputs.saw, "私は", "を見ました。");
+          let ateEn = await getTrans(inputs.ate, "私は", "を食べました。");
+          let itWasEn = await getTrans(inputs.itWas, "それは", "でした。");
+
+          isDone = true;
+          clearTimeout(fallbackTimer);
+          
+          setAnswers({
+            wentTo: { ja: inputs.wentTo, en: cleanTrans(wentToEn, 'wentTo'), img: answers.wentTo.img },
+            enjoyed: { ja: inputs.enjoyed, en: cleanTrans(enjoyedEn, 'enjoyed'), img: answers.enjoyed.img },
+            saw: { ja: inputs.saw, en: cleanTrans(sawEn, 'saw'), img: answers.saw.img },
+            ate: { ja: inputs.ate, en: cleanTrans(ateEn, 'ate'), img: answers.ate.img },
+            itWas: { ja: inputs.itWas, en: cleanTrans(itWasEn, 'itWas'), img: answers.itWas.img },
+          });
+
+          setFallbackMode(curr => {
+            if(!curr) {
+              setIsTranslating(false);
+              setStep('IMAGE_TUTORIAL');
+            }
+            return curr;
+          });
+        } catch (e) {
+          isDone = true;
+          clearTimeout(fallbackTimer);
+          setFallbackMode(true); // エラー時も手動へ
+        }
+      };
+
+      const handleManualTranslateComplete = () => {
+<!-- ... existing code ... -->
+            <div className="flex-1 bg-gray-100 flex justify-center items-center p-4 relative overflow-hidden">
+              {currentData.img ? (
+                <img src={currentData.img} alt="slide" className="w-full h-full object-contain drop-shadow-xl rounded-xl" onError={(e) => { e.target.src = "https://placehold.co/800x600/ffeeee/ff3333?text=Error:+Cannot+load+image.\\nPlease+try+another+URL."; }} />
+              ) : (
+                <div className="text-3xl text-gray-400 font-bold bg-white p-12 rounded-3xl border-4 border-dashed border-gray-300 flex flex-col items-center">
+                  <span className="text-6xl mb-4">📷</span>がぞう は ありません
+                </div>
+              )}
+            </div>
+<!-- ... existing code ... -->
+            <div className="absolute top-4 right-4 bg-yellow-400 text-yellow-900 font-bold px-6 py-2 rounded-full border-4 border-yellow-200 shadow-lg text-xl z-10 flex gap-4">
+              <span>🪙 {totalCoins}</span>
+              <span>🐟 {items.salmon || 0}</span>
+            </div>
+            
+            <div className="max-w-2xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border-4 border-blue-200 mt-20 md:mt-16">
+              <div className="bg-red-100 text-red-800 p-3 text-sm md:text-base font-bold text-center border-b-2 border-red-200">
+                ⚠️ ブラウザの履歴を消すとデータが消えます。次の授業まで履歴を消さないように気をつけてね！
+              </div>
+              <div className="bg-gradient-to-r from-blue-400 to-indigo-500 p-8 text-center text-white relative">
+                <h1 className="text-3xl md:text-4xl font-extrabold mb-4 drop-shadow-md mt-4">おもいで スライドを つくろう！</h1>
+<!-- ... existing code ... -->
+                    <div key={work.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
+                      <span className="font-bold text-gray-600">{work.date} の作品 ({savedWorks.length - idx})</span>
+                      <div className="flex gap-2">
+                         <button onClick={() => { setViewingWork(work); setStep('VIEW_WORKSHEET'); }} className="text-sm bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-bold py-2 px-4 rounded shadow-sm border border-yellow-300">ノート</button>
+                         <button onClick={() => { setViewingWork(work); setStep('VIEW_SLIDESHOW'); }} className="text-sm bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-2 px-4 rounded shadow-sm border border-blue-300">スライド</button>
+                      </div>
+                    </div>
+<!-- ... existing code ... -->
+                    <input type="text" value={answers[key].img} onChange={(e) => setAnswers(p => ({ ...p, [key]: { ...p[key], img: e.target.value } }))} placeholder="https://... （ここで 右クリック して はりつけ）" className="w-full p-3 border-2 border-gray-300 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 bg-white shadow-inner mb-2" />
+                    {answers[key].img && (
+                      <div className="flex justify-center mt-2 bg-gray-200 rounded-xl p-2 border border-gray-300">
+                        <img src={answers[key].img} alt="preview" className="max-h-40 object-contain rounded drop-shadow-md" onError={(e) => { e.target.style.display='none'; e.target.parentElement.innerHTML = '<span class="text-red-500 font-bold p-2 text-center text-sm">画像が読み込めません💦<br/>別のアドレスをためしてね！</span>'; }} />
+                      </div>
+                    )}
+                  </div>
+<!-- ... existing code ... -->
+      } else if (step === 'WORKSHEET_WRITE') {
+        content = (
+          <div className="min-h-screen bg-yellow-50 p-4 flex flex-col items-center py-12 relative">
+             <BackButton onClick={handleBack} />
+             <div className="max-w-3xl w-full mt-8">
+               <div className="bg-white p-6 rounded-3xl shadow-xl border-4 border-yellow-300 text-center mb-6">
+                 <h2 className="text-2xl font-bold text-yellow-800 mb-2">✏️ ノートに 書きうつそう！</h2>
+                 <p className="text-gray-600 font-bold">下の えいご を、じぶんの ノート に 書いてね。</p>
+               </div>
+               
+               <div className="bg-white border-2 border-gray-300 p-6 md:p-10 rounded-2xl shadow-inner bg-[url('https://www.transparenttextures.com/patterns/lined-paper-2.png')] mb-6">
+<!-- ... existing code ... -->
+      } else if (step === 'VIEW_WORKSHEET' && viewingWork) {
+         content = (
+           <div className="min-h-screen bg-yellow-50 p-4 flex flex-col items-center py-12 relative">
+             <BackButton onClick={handleBack} />
+             <div className="max-w-3xl w-full mt-12 bg-white border-4 border-yellow-300 p-6 md:p-10 rounded-3xl shadow-2xl bg-[url('https://www.transparenttextures.com/patterns/lined-paper-2.png')]">
+               <h3 className="text-2xl font-bold text-yellow-700 mb-6 flex items-center border-b-2 border-yellow-200 pb-2"><span className="mr-2 text-3xl">📑</span> {viewingWork.date} のノート</h3>
+               <WorksheetLines answers={viewingWork.answers} />
+             </div>
+           </div>
+         );
+<!-- ... existing code ... -->
