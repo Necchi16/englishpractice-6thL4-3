@@ -1,22 +1,171 @@
-<!-- ... existing code ... -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>夏休みの思い出スライド</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&family=Zen+Maru+Gothic:wght@700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
+
+  <style>
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+    @keyframes bounceIn { 0% { transform: scale(0.1); opacity: 0; } 60% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+    .animate-bounce-in { animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+    * { -webkit-tap-highlight-color: transparent; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .font-note { font-family: 'Nunito', 'Zen Maru Gothic', sans-serif; letter-spacing: 0.05em; }
+    .slide-bg { background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); }
+  </style>
+</head>
+<body class="bg-blue-50 font-sans touch-manipulation">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef } = React;
+
+    // --- 定数定義 ---
     const SUGGESTIONS = {
       wentTo: ['うみ', 'おばあちゃんのいえ', 'ゆうえんち', 'キャンプ', 'プール', 'やま', 'としょかん'],
       enjoyed: ['すいえい', 'ゲーム', 'むしとり', 'バーベキュー', 'はなび', 'しゅくだい', 'どくしょ'],
       saw: ['はなび', 'ひまわり', 'かぶとむし', 'おまつり', 'うみ', 'ともだち'],
-      ate: ['かきごおり', 'スイカ', 'そうめん', 'カレー', 'アイスクリーム', 'おすし', 'バーベキュー'],
-      itWas: ['たのしかった (fun)', 'すごかった (amazing)', 'うつくしかった (beautiful)', 'おもしろかった (interesting)', 'かっこよかった (cool)', 'すばらしかった (great)', 'すてきだった (wonderful)']
+      ate: ['かきごおり', 'スイカ', 'そうめん', 'カレー', 'アイスクリーム', 'おすし'],
+      itWas: [
+        "おなじ (same)", "ちがう (different)", "ながい (long)", "みじかい (short)",
+        "はやい (fast)", "おそい (slow)", "すばらしい (amazing)", "うつくしい (beautiful)",
+        "かっこいい (cool)", "わくわくした (exciting)", "ゆうめいな (famous)",
+        "すばらしい (fantastic)", "おきにいり (favorite)", "たのしい (fun)",
+        "よい (good)", "すごくいい (great)", "おもしろい (interesting)",
+        "いいね (nice)", "ピカピカの (shiny)", "すてきな (wonderful)"
+      ]
     };
 
     const ITEM_LABELS = {
-      wentTo: { icon: '🚶‍♂️', title: 'どこに 行った？', enHint: '(went to)', prefix: 'I went to ', suffix: '.' },
-      enjoyed: { icon: '✨', title: 'なにを 楽しんだ？', enHint: '(enjoyed)', prefix: 'I enjoyed ', suffix: '.' },
-      saw: { icon: '👀', title: 'なにを 見た？', enHint: '(saw)', prefix: 'I saw ', suffix: '.' },
-      ate: { icon: '🍎', title: 'なにを 食べた？', enHint: '(ate)', prefix: 'I ate ', suffix: '.' },
-      itWas: { icon: '💭', title: 'どんな かんそう（気持ち）？', enHint: '(It was)', prefix: 'It was ', suffix: '.' }
+      wentTo: { icon: '🚶‍♂️', title: 'どこに 行った？', enHint: '(went to)', prefix: 'I went to ' },
+      enjoyed: { icon: '✨', title: 'なにを 楽しんだ？', enHint: '(enjoyed)', prefix: 'I enjoyed ' },
+      saw: { icon: '👀', title: 'なにを 見た？', enHint: '(saw)', prefix: 'I saw ' },
+      ate: { icon: '🍎', title: 'なにを 食べた？', enHint: '(ate)', prefix: 'I ate ' },
+      itWas: { icon: '💭', title: 'どんな かんそう（気持ち）？', enHint: '(It was)', prefix: 'It was ' }
     };
 
+    // ランダム進化用の配列
+    const KUMMANI_STAGES = [
+      { id: 1, name: "コグマニ", emoji: "🧸", reqExp: 0 },
+      { id: 2, name: "クッマーニ", emoji: "🐻", reqExp: 3 },
+      { id: 3, name: "シロクッマーニ", emoji: "🐻‍❄️", reqExp: 8 },
+      { id: 4, name: "パンダニ", emoji: "🐼", reqExp: 15 },
+      { id: 5, name: "メカ・クッマーニ", emoji: "🤖", reqExp: 25 },
+      { id: 6, name: "キング・クッマーニ", emoji: "👑", reqExp: 40 },
+      { id: 7, name: "ドラゴン・クッマーニ", emoji: "🐉", reqExp: 55 },
+      { id: 8, name: "ゴースト・クッマーニ", emoji: "👻", reqExp: 70 },
+      { id: 9, name: "エイリアン・クッマーニ", emoji: "👽", reqExp: 90 }
+    ];
+
     const DISHES = [
-<!-- ... existing code ... -->
+      "🍙 シャケのおにぎり", "🐟 焼きジャケ", "🍲 シチュー", "🍤 フライ",
+      "🍣 おすし", "🍝 パスタ", "🍔 バーガー", "🍕 ピザ"
+    ];
+
+    const GAS_URLS = [
+      "https://script.google.com/macros/s/AKfycbweESd0ikrHJl6Pl5lPnniXgoUWW45_YDUIAXuCBYKkclBs3T47GX83B5q-GAc8Hw3sPQ/exec",
+      "https://script.google.com/a/macros/s.kansai.soka.ed.jp/s/AKfycbyWmVjVU2MWqugLvwaal9Gp768JDQX_ZywK3SyPjpsClR_AaSf9FHR6FPJHVekinpQiUQ/exec",
+      "https://script.google.com/macros/s/AKfycbz6Jeiu5yDwBOwWpAIicyXdWqtaT-qT7KjP59DU3b7IkP3eDucpggHW1Fxrm2xBbsQL/exec"
+    ];
+
+    function App() {
+      const [step, setStep] = useState('HOME'); 
+      const [totalCoins, setTotalCoins] = useState(0);
+      const [items, setItems] = useState({ salmon: 0 });
+      const [kummaniLevel, setKummaniLevel] = useState(1);
+      const [kummaniExp, setKummaniExp] = useState(0);
+      
+      const [inputs, setInputs] = useState({ wentTo: '', enjoyed: '', saw: '', ate: '', itWas: '' });
+      const [answers, setAnswers] = useState(null);
+      const [savedWorks, setSavedWorks] = useState([]);
+      const [viewingWork, setViewingWork] = useState(null);
+      const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+
+      const [isTranslating, setIsTranslating] = useState(false);
+      const [fallbackMode, setFallbackMode] = useState(false);
+
+      const [currentSpeakLine, setCurrentSpeakLine] = useState(0);
+      const [isListening, setIsListening] = useState(false);
+      const [feedbackMsg, setFeedbackMsg] = useState("");
+      
+      const [feedEffect, setFeedEffect] = useState(null);
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const synth = window.speechSynthesis;
+
+      useEffect(() => {
+        const load = (key, setter, isObj = false) => {
+          const val = localStorage.getItem(key);
+          if (val) setter(isObj ? JSON.parse(val) : parseInt(val, 10));
+        };
+        load('englishAppCoins_S', setTotalCoins);
+        load('englishAppItems_S', setItems, true);
+        load('englishAppKummaniLevel_S', setKummaniLevel);
+        load('englishAppKummaniExp_S', setKummaniExp);
+        load('englishAppWorks_S', setSavedWorks, true);
+      }, []);
+
+      const saveProgress = (newCoins, newItems, newLevel, newExp) => {
+        localStorage.setItem('englishAppCoins_S', newCoins.toString());
+        localStorage.setItem('englishAppItems_S', JSON.stringify(newItems));
+        localStorage.setItem('englishAppKummaniLevel_S', newLevel.toString());
+        localStorage.setItem('englishAppKummaniExp_S', newExp.toString());
+        setTotalCoins(newCoins); setItems(newItems); setKummaniLevel(newLevel); setKummaniExp(newExp);
+      };
+
+      const saveWork = (workData) => {
+        const newWorks = [workData, ...savedWorks];
+        localStorage.setItem('englishAppWorks_S', JSON.stringify(newWorks));
+        setSavedWorks(newWorks);
+      };
+
+      const speak = useCallback((text) => {
+        if (synth.speaking) synth.cancel();
+        const utterThis = new SpeechSynthesisUtterance(text);
+        utterThis.lang = 'en-US';
+        utterThis.rate = 0.9;
+        synth.speak(utterThis);
+      }, [synth]);
+
+      // 英語テキストのクリーニング（I went to などの重複とピリオドの削除）
+      const cleanTrans = (text, type) => {
+        if (!text) return "";
+        let s = text.trim();
+        s = s.replace(/[\.\,\!]+$/, "").trim(); // 末尾のピリオドなどを削除
+        if (type === 'wentTo') s = s.replace(/^i went to /i, "").replace(/^i visited /i, "");
+        if (type === 'enjoyed') s = s.replace(/^i enjoyed /i, "").replace(/^i had fun /i, "");
+        if (type === 'saw') s = s.replace(/^i saw /i, "").replace(/^i watched /i, "");
+        if (type === 'ate') s = s.replace(/^i ate /i, "").replace(/^i had /i, "");
+        if (type === 'itWas') s = s.replace(/^it was /i, "").replace(/^they were /i, "");
+        return s.trim() || "something";
+      };
+
+      const translateWithGAS = async (text) => {
+        const urls = [...GAS_URLS].sort(() => 0.5 - Math.random());
+        for (const url of urls) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const res = await fetch(`${url}?text=${encodeURIComponent(text)}`, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            const data = await res.json();
+            if (data && data.text) return data.text.toLowerCase();
+          } catch (e) {
+            console.warn("GAS translation failed, trying next...");
+          }
+        }
+        throw new Error("All GAS URLs failed");
+      };
+
       const handleTranslateAll = async () => {
         if (!inputs.wentTo.trim() || !inputs.enjoyed.trim() || !inputs.saw.trim() || !inputs.ate.trim() || !inputs.itWas.trim()) {
           alert("５つ すべて にゅうりょく してね！");
@@ -26,57 +175,40 @@
         setFallbackMode(false);
         
         let isDone = false;
-        // 3秒タイマー
+        // 3秒でフォールバックモードへ
         const fallbackTimer = setTimeout(() => {
-          if(!isDone) setFallbackMode(true);
+          if (!isDone) setFallbackMode(true);
         }, 3000);
 
-        const getTrans = async (jaText, prefix, suffix) => {
-          if(!jaText) return "";
-          const cleanJa = jaText.replace(/\s*\(.*?\)\s*/g, ''); // カッコ内の英語を消して日本語だけにする
+        const getTrans = async (jaText, prefix, suffix, type) => {
+          // カッコ内の英語を消して日本語だけにする
+          const cleanJa = jaText.replace(/\s*\(.*?\)\s*/g, ""); 
           const query = `${prefix}${cleanJa}${suffix}`;
-          const en = await translateWithGAS(query);
-          return en;
-        };
-
-        const cleanTrans = (text, type) => {
-          if (!text) return "";
-          let s = text.trim();
-          s = s.replace(/[\.\,\!]+$/, '').trim(); // 末尾のピリオドなどを削除
-          if (type === 'wentTo') s = s.replace(/^i went to /i, '').replace(/^i visited /i, '');
-          if (type === 'enjoyed') s = s.replace(/^i enjoyed /i, '').replace(/^i had fun /i, '');
-          if (type === 'saw') s = s.replace(/^i saw /i, '').replace(/^i watched /i, '').replace(/^i looked at /i, '');
-          if (type === 'ate') s = s.replace(/^i ate /i, '').replace(/^i had /i, '');
-          if (type === 'itWas') s = s.replace(/^it was /i, '').replace(/^it is /i, '').replace(/^they were /i, '');
-          return s.trim() || "something";
+          const enText = await translateWithGAS(query);
+          return cleanTrans(enText, type);
         };
 
         try {
-          let wentToEn = await getTrans(inputs.wentTo, "私は", "に行きました。");
-          let enjoyedEn = await getTrans(inputs.enjoyed, "私は", "を楽しみました。");
-          let sawEn = await getTrans(inputs.saw, "私は", "を見ました。");
-          let ateEn = await getTrans(inputs.ate, "私は", "を食べました。");
-          let itWasEn = await getTrans(inputs.itWas, "それは", "でした。");
+          const w = await getTrans(inputs.wentTo, "私は", "に行きました。", "wentTo");
+          const e = await getTrans(inputs.enjoyed, "私は", "を楽しみました。", "enjoyed");
+          const s = await getTrans(inputs.saw, "私は", "を見ました。", "saw");
+          const a = await getTrans(inputs.ate, "私は", "を食べました。", "ate");
+          const i = await getTrans(inputs.itWas, "それは", "でした。", "itWas");
 
           isDone = true;
           clearTimeout(fallbackTimer);
           
           setAnswers({
-            wentTo: { ja: inputs.wentTo, en: cleanTrans(wentToEn, 'wentTo'), img: answers.wentTo.img },
-            enjoyed: { ja: inputs.enjoyed, en: cleanTrans(enjoyedEn, 'enjoyed'), img: answers.enjoyed.img },
-            saw: { ja: inputs.saw, en: cleanTrans(sawEn, 'saw'), img: answers.saw.img },
-            ate: { ja: inputs.ate, en: cleanTrans(ateEn, 'ate'), img: answers.ate.img },
-            itWas: { ja: inputs.itWas, en: cleanTrans(itWasEn, 'itWas'), img: answers.itWas.img },
+            wentTo: { ja: inputs.wentTo, en: w, img: "" },
+            enjoyed: { ja: inputs.enjoyed, en: e, img: "" },
+            saw: { ja: inputs.saw, en: s, img: "" },
+            ate: { ja: inputs.ate, en: a, img: "" },
+            itWas: { ja: inputs.itWas, en: i, img: "" }
           });
-
-          setFallbackMode(curr => {
-            if(!curr) {
-              setIsTranslating(false);
-              setStep('IMAGE_TUTORIAL');
-            }
-            return curr;
-          });
-        } catch (e) {
+          setFallbackMode(false);
+          setIsTranslating(false);
+          setStep('IMAGE_INPUT');
+        } catch (err) {
           isDone = true;
           clearTimeout(fallbackTimer);
           setFallbackMode(true); // エラー時も手動へ
@@ -84,65 +216,383 @@
       };
 
       const handleManualTranslateComplete = () => {
-<!-- ... existing code ... -->
-            <div className="flex-1 bg-gray-100 flex justify-center items-center p-4 relative overflow-hidden">
-              {currentData.img ? (
-                <img src={currentData.img} alt="slide" className="w-full h-full object-contain drop-shadow-xl rounded-xl" onError={(e) => { e.target.src = "https://placehold.co/800x600/ffeeee/ff3333?text=Error:+Cannot+load+image.\\nPlease+try+another+URL."; }} />
-              ) : (
-                <div className="text-3xl text-gray-400 font-bold bg-white p-12 rounded-3xl border-4 border-dashed border-gray-300 flex flex-col items-center">
-                  <span className="text-6xl mb-4">📷</span>がぞう は ありません
+        setAnswers({
+          wentTo: { ja: inputs.wentTo, en: cleanTrans(inputs.wentToEn, 'wentTo'), img: "" },
+          enjoyed: { ja: inputs.enjoyed, en: cleanTrans(inputs.enjoyedEn, 'enjoyed'), img: "" },
+          saw: { ja: inputs.saw, en: cleanTrans(inputs.sawEn, 'saw'), img: "" },
+          ate: { ja: inputs.ate, en: cleanTrans(inputs.ateEn, 'ate'), img: "" },
+          itWas: { ja: inputs.itWas, en: cleanTrans(inputs.itWasEn, 'itWas'), img: "" }
+        });
+        setFallbackMode(false);
+        setIsTranslating(false);
+        setStep('IMAGE_INPUT');
+      };
+
+      const startListening = (targetWord, index) => {
+        if (!SpeechRecognition) return alert("マイクが使えません。");
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        setIsListening(true);
+        setFeedbackMsg("");
+
+        recognition.onresult = (event) => {
+          const trans = event.results[0][0].transcript.toLowerCase();
+          const target = targetWord.split(' ')[0].toLowerCase(); // 最初の単語で判定
+          if (trans.includes(target) || trans.length > 10) {
+            setFeedbackMsg("Good! 👏");
+            setTimeout(() => {
+              setFeedbackMsg("");
+              setCurrentSpeakLine(c => c + 1);
+            }, 1500);
+          } else {
+            setFeedbackMsg("おしい！もう一度！\n(" + trans + " と聞こえました)");
+          }
+        };
+        recognition.onerror = () => { setFeedbackMsg("エラーがおきました。もう一度ボタンをおしてね。"); setIsListening(false); };
+        recognition.onend = () => setIsListening(false);
+        recognition.start();
+      };
+
+      const handleFinishAll = () => {
+        saveProgress(totalCoins + 10, { ...items, salmon: items.salmon + 1 }, kummaniLevel, kummaniExp);
+        const workData = { date: new Date().toLocaleString(), answers };
+        saveWork(workData);
+        setViewingWork(workData);
+        setStep('VIEW_SLIDESHOW');
+        setCurrentSlideIndex(0);
+      };
+
+      // 育成
+      const feedKummani = () => {
+        if (items.salmon >= 1) {
+          const newItems = { ...items, salmon: items.salmon - 1 };
+          const dish = DISHES[Math.floor(Math.random() * DISHES.length)];
+          setFeedEffect({ phase: 'cooking' });
+          
+          setTimeout(() => {
+            setFeedEffect({ phase: 'done', dish });
+            setTimeout(() => {
+              const newExp = kummaniExp + 1;
+              const currentStage = KUMMANI_STAGES.find(s => s.id === kummaniLevel) || KUMMANI_STAGES[0];
+              const nextReq = KUMMANI_STAGES.find(s => s.id === kummaniLevel + 1)?.reqExp || 999;
+              
+              if (newExp >= nextReq) {
+                // 進化（最終形態からはコグマニに戻る、またはランダム進化）
+                let nextLevel = kummaniLevel + 1;
+                if (nextLevel > KUMMANI_STAGES.length) nextLevel = 1; // 転生
+                const nextStage = KUMMANI_STAGES.find(s => s.id === nextLevel);
+                
+                setFeedEffect({ phase: 'evolving', from: currentStage, to: nextStage });
+                setTimeout(() => {
+                  saveProgress(totalCoins, newItems, nextLevel, newExp);
+                  setFeedEffect({ phase: 'evolved', to: nextStage });
+                  setTimeout(() => setFeedEffect(null), 3000);
+                }, 2500);
+              } else {
+                saveProgress(totalCoins, newItems, kummaniLevel, newExp);
+                setFeedEffect(null);
+              }
+            }, 2000);
+          }, 1500);
+        }
+      };
+
+      // UIレンダリング
+      let content = null;
+      const currentStage = KUMMANI_STAGES.find(s => s.id === kummaniLevel) || KUMMANI_STAGES[0];
+      const nextStage = KUMMANI_STAGES.find(s => s.id === kummaniLevel + 1);
+      
+      const renderNoteLines = (ansData, editable = false) => {
+        const keys = ['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'];
+        return (
+          <div className="space-y-6 text-left w-full mt-4">
+            {keys.map((k, i) => (
+              <div key={k} className="border-b-2 border-dashed border-gray-400 pb-2">
+                <div className="text-gray-500 text-sm font-bold mb-1">({ITEM_LABELS[k].title})</div>
+                <span className="text-xl md:text-2xl font-note font-bold flex items-center flex-wrap gap-2">
+                  <span>{i+1}. {ITEM_LABELS[k].prefix}</span>
+                  {editable ? (
+                    <input type="text" value={ansData[k].en} onChange={e => setAnswers({...answers, [k]: {...answers[k], en: e.target.value}})} className="border-b-2 border-blue-400 focus:outline-none focus:bg-blue-50 px-2 text-blue-700 bg-transparent min-w-[150px]" />
+                  ) : (
+                    <span className="text-blue-700 underline decoration-blue-300 decoration-4 underline-offset-4">{ansData[k].en}</span>
+                  )}
+                  <span>.</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      };
+
+      if (step === 'HOME') {
+        content = (
+          <div className="min-h-screen p-4 md:p-8 flex flex-col justify-center relative bg-blue-50 pb-20">
+            <div className="bg-red-100 text-red-800 font-bold p-3 rounded-xl mb-4 text-center border-2 border-red-200 text-sm md:text-base">
+              ⚠️ ブラウザの履歴を消すとデータが消えます。次の授業まで履歴を消さないように気をつけてね！
+            </div>
+
+            {feedEffect && (
+              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl relative">
+                  {feedEffect.phase === 'cooking' && <div className="animate-pulse"><div className="text-8xl mb-4">🍳</div><p className="text-2xl font-bold text-orange-600">おりょうり中...</p></div>}
+                  {feedEffect.phase === 'done' && <div className="animate-fade-in-up"><div className="text-8xl mb-4">✨🍽️✨</div><p className="text-2xl font-bold text-orange-700 mb-6">{feedEffect.dish}</p><div className="text-7xl animate-bounce mb-2">{currentStage.emoji}</div></div>}
+                  {feedEffect.phase === 'evolving' && <div><p className="text-2xl font-bold text-gray-800 mb-8">おや…？</p><div className="text-9xl animate-pulse">{feedEffect.from.emoji}</div></div>}
+                  {feedEffect.phase === 'evolved' && <div className="animate-bounce-in"><p className="text-3xl font-extrabold text-yellow-500 mb-8">おめでとう！</p><div className="text-9xl mb-8">{feedEffect.to.emoji}</div><p className="text-2xl font-bold text-gray-800"><span className="text-blue-600 text-3xl">{feedEffect.to.name}</span> に しんかした！</p></div>}
                 </div>
+              </div>
+            )}
+            
+            <div className="max-w-2xl w-full mx-auto bg-white rounded-3xl shadow-xl border-4 border-blue-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-400 to-indigo-500 p-8 text-center text-white">
+                <h1 className="text-3xl md:text-4xl font-extrabold drop-shadow-md">おもいで スライドをつくろう！</h1>
+              </div>
+              <div className="p-6 text-center">
+                <button onClick={() => { setInputs({wentTo:'', enjoyed:'', saw:'', ate:'', itWas:''}); setStep('INPUT'); }} className="w-full bg-red-500 hover:bg-red-600 text-white text-2xl font-bold py-6 rounded-2xl shadow-lg transform transition hover:scale-105 mb-8">
+                  ▶️ あたらしく つくる！
+                </button>
+                
+                {savedWorks.length > 0 && (
+                  <div className="mb-8 text-left bg-gray-50 p-4 rounded-xl border-2 border-gray-200">
+                    <h3 className="font-bold text-gray-700 mb-3">📁 つくった さくひん</h3>
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                      {savedWorks.map((work, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                          <span className="text-sm font-bold text-gray-600">{work.date} の作品 ({savedWorks.length - idx})</span>
+                          <div className="flex gap-2">
+                            <button onClick={() => { setViewingWork(work); setStep('VIEW_WORKSHEET'); }} className="text-sm bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-bold py-2 px-4 rounded shadow-sm border border-yellow-300">ノート</button>
+                            <button onClick={() => { setViewingWork(work); setStep('VIEW_SLIDESHOW'); }} className="text-sm bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-2 px-4 rounded shadow-sm border border-blue-300">スライド</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="border-t-4 border-dashed border-gray-200 pt-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-gray-700">🐻 クッマーニの おせわ</h2>
+                    <div className="bg-yellow-100 text-yellow-800 font-bold px-4 py-1 rounded-full border-2 border-yellow-300">🐟 シャケ: {items.salmon} / 🪙 {totalCoins}</div>
+                  </div>
+                  <div className="bg-blue-50 p-6 rounded-2xl border-2 border-blue-100 flex flex-col items-center relative">
+                    <div className="text-7xl mb-2 drop-shadow-md">{currentStage.emoji}</div>
+                    <div className="font-bold text-blue-800 mb-2">{currentStage.name} (Lv.{currentStage.id})</div>
+                    {nextStage ? (
+                      <div className="w-full max-w-xs text-xs font-bold text-gray-500 text-right mb-4">つぎまで: {nextStage.reqExp - kummaniExp} EXP</div>
+                    ) : (
+                      <div className="w-full max-w-xs text-xs font-bold text-orange-500 text-right mb-4">MAX LEVEL (つぎは転生)</div>
+                    )}
+                    <button onClick={feedKummani} disabled={items.salmon < 1} className={`w-full py-3 rounded-xl font-bold shadow-md text-lg ${items.salmon >= 1 ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}>
+                      {items.salmon >= 1 ? '🍳 おりょうりして あげる' : 'シャケが ないよ'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      } else if (step === 'INPUT') {
+        const InputCard = ({ k }) => (
+          <div className="bg-white p-4 rounded-xl mb-4 border-2 border-pink-100 shadow-sm text-left">
+            <h3 className="font-bold text-gray-700 mb-2">{ITEM_LABELS[k].icon} {ITEM_LABELS[k].title} <span className="text-sm font-normal text-gray-500">例: {SUGGESTIONS[k][0]}</span></h3>
+            <input type="text" value={inputs[k]} onChange={e => setInputs({...inputs, [k]: e.target.value})} className="w-full p-3 border-2 border-pink-200 rounded-lg font-bold text-lg focus:outline-none focus:border-pink-400 bg-pink-50 mb-2" />
+            <div className="flex flex-wrap gap-2">
+              {SUGGESTIONS[k].map(opt => (
+                <button key={opt} onClick={() => setInputs({...inputs, [k]: opt})} className="text-xs bg-white border border-gray-300 px-3 py-1 rounded-full text-gray-600 hover:bg-pink-100">{opt}</button>
+              ))}
+            </div>
+          </div>
+        );
+
+        content = (
+          <div className="min-h-screen p-4 flex flex-col items-center py-8">
+            <button onClick={() => setStep('HOME')} className="self-start mb-4 bg-white px-4 py-2 rounded-full shadow font-bold text-gray-600 border">◀ もどる</button>
+            <div className="w-full max-w-xl text-center">
+              <h2 className="text-2xl font-bold text-pink-700 mb-6 bg-pink-100 py-2 rounded-full border-2 border-pink-200">なつやすみの おもいで</h2>
+              {['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'].map(k => <InputCard key={k} k={k} />)}
+              
+              {fallbackMode ? (
+                <div className="bg-red-50 p-6 rounded-2xl border-4 border-red-300 mt-6 animate-fade-in-up">
+                  <h3 className="font-bold text-red-700 text-lg mb-2">うまく ほんやく できませんでした💦</h3>
+                  <p className="text-sm text-gray-700 mb-4 font-bold">Googleほんやくを ひらいて、じぶんで えいごに してみよう！</p>
+                  <a href="https://translate.google.co.jp/?sl=ja&tl=en" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-500 text-white font-bold py-2 px-6 rounded-full mb-6">🌐 Googleほんやく をひらく</a>
+                  
+                  <div className="space-y-4 text-left">
+                    {['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'].map(k => (
+                      <div key={k}>
+                        <p className="text-sm font-bold text-gray-600">「{inputs[k]}」→ えいごで？</p>
+                        <input type="text" value={inputs[k+'En'] || ''} onChange={e => setInputs({...inputs, [k+'En']: e.target.value})} className="w-full p-2 border-2 border-gray-300 rounded focus:bg-white bg-gray-50" />
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={handleManualTranslateComplete} className="w-full mt-6 bg-green-500 text-white font-bold py-4 rounded-xl shadow-lg">えいごを いれたよ！</button>
+                </div>
+              ) : (
+                <button onClick={handleTranslateAll} disabled={isTranslating} className="w-full mt-6 bg-pink-500 hover:bg-pink-600 text-white text-xl font-bold py-5 rounded-2xl shadow-lg">
+                  {isTranslating ? '⏳ ほんやく中...' : 'えいごに ほんやく！'}
+                </button>
               )}
             </div>
-<!-- ... existing code ... -->
-            <div className="absolute top-4 right-4 bg-yellow-400 text-yellow-900 font-bold px-6 py-2 rounded-full border-4 border-yellow-200 shadow-lg text-xl z-10 flex gap-4">
-              <span>🪙 {totalCoins}</span>
-              <span>🐟 {items.salmon || 0}</span>
-            </div>
-            
-            <div className="max-w-2xl w-full bg-white rounded-3xl shadow-xl overflow-hidden border-4 border-blue-200 mt-20 md:mt-16">
-              <div className="bg-red-100 text-red-800 p-3 text-sm md:text-base font-bold text-center border-b-2 border-red-200">
-                ⚠️ ブラウザの履歴を消すとデータが消えます。次の授業まで履歴を消さないように気をつけてね！
+          </div>
+        );
+      } else if (step === 'IMAGE_INPUT') {
+        content = (
+          <div className="min-h-screen p-4 flex flex-col items-center py-8">
+            <div className="w-full max-w-2xl bg-white p-6 rounded-3xl shadow-xl border-4 border-blue-200">
+              <h2 className="text-2xl font-bold text-blue-700 mb-4 text-center">スライドの がぞうを さがそう🖼️</h2>
+              <div className="bg-blue-50 p-4 rounded-xl mb-6 text-sm font-bold text-gray-700">
+                <ol className="list-decimal pl-5 space-y-1">
+                  <li>新しいタブで 画像けんさく をする</li>
+                  <li>好きな画像を <span className="text-blue-600">右クリック</span>（または 長おし）</li>
+                  <li>「<span className="text-red-500">画像アドレスをコピー</span>」をえらぶ</li>
+                  <li>下の はこに 貼りつける（ペースト）</li>
+                </ol>
               </div>
-              <div className="bg-gradient-to-r from-blue-400 to-indigo-500 p-8 text-center text-white relative">
-                <h1 className="text-3xl md:text-4xl font-extrabold mb-4 drop-shadow-md mt-4">おもいで スライドを つくろう！</h1>
-<!-- ... existing code ... -->
-                    <div key={work.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
-                      <span className="font-bold text-gray-600">{work.date} の作品 ({savedWorks.length - idx})</span>
-                      <div className="flex gap-2">
-                         <button onClick={() => { setViewingWork(work); setStep('VIEW_WORKSHEET'); }} className="text-sm bg-yellow-100 hover:bg-yellow-200 text-yellow-800 font-bold py-2 px-4 rounded shadow-sm border border-yellow-300">ノート</button>
-                         <button onClick={() => { setViewingWork(work); setStep('VIEW_SLIDESHOW'); }} className="text-sm bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold py-2 px-4 rounded shadow-sm border border-blue-300">スライド</button>
-                      </div>
-                    </div>
-<!-- ... existing code ... -->
-                    <input type="text" value={answers[key].img} onChange={(e) => setAnswers(p => ({ ...p, [key]: { ...p[key], img: e.target.value } }))} placeholder="https://... （ここで 右クリック して はりつけ）" className="w-full p-3 border-2 border-gray-300 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 bg-white shadow-inner mb-2" />
-                    {answers[key].img && (
-                      <div className="flex justify-center mt-2 bg-gray-200 rounded-xl p-2 border border-gray-300">
-                        <img src={answers[key].img} alt="preview" className="max-h-40 object-contain rounded drop-shadow-md" onError={(e) => { e.target.style.display='none'; e.target.parentElement.innerHTML = '<span class="text-red-500 font-bold p-2 text-center text-sm">画像が読み込めません💦<br/>別のアドレスをためしてね！</span>'; }} />
+              
+              <div className="space-y-6">
+                {['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'].map(k => (
+                  <div key={k} className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                    <p className="font-bold text-gray-700 mb-2">{ITEM_LABELS[k].title} ({answers[k].ja})</p>
+                    <input type="text" value={answers[k].img} onChange={e => setAnswers({...answers, [k]: {...answers[k], img: e.target.value}})} placeholder="https://... (ここで 右クリック して はりつけ)" className="w-full p-3 border-2 border-gray-300 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-500 bg-white shadow-inner mb-2" />
+                    {answers[k].img && (
+                      <div className="relative">
+                        <img src={answers[k].img} alt="preview" onError={(e) => {e.target.style.display='none'; e.target.parentElement.innerHTML = '<div class="text-red-500 font-bold bg-red-50 p-2 rounded border border-red-200 text-sm">画像が読み込めません💦 別のアドレスをためしてね！</div>';}} className="h-32 object-cover rounded shadow" />
                       </div>
                     )}
                   </div>
-<!-- ... existing code ... -->
-      } else if (step === 'WORKSHEET_WRITE') {
+                ))}
+              </div>
+              <button onClick={() => setStep('NOTE_WRITE')} className="w-full mt-8 bg-blue-500 hover:bg-blue-600 text-white text-xl font-bold py-5 rounded-2xl shadow-lg">がぞうを いれた！</button>
+            </div>
+          </div>
+        );
+      } else if (step === 'NOTE_WRITE') {
         content = (
-          <div className="min-h-screen bg-yellow-50 p-4 flex flex-col items-center py-12 relative">
-             <BackButton onClick={handleBack} />
-             <div className="max-w-3xl w-full mt-8">
-               <div className="bg-white p-6 rounded-3xl shadow-xl border-4 border-yellow-300 text-center mb-6">
-                 <h2 className="text-2xl font-bold text-yellow-800 mb-2">✏️ ノートに 書きうつそう！</h2>
-                 <p className="text-gray-600 font-bold">下の えいご を、じぶんの ノート に 書いてね。</p>
-               </div>
-               
-               <div className="bg-white border-2 border-gray-300 p-6 md:p-10 rounded-2xl shadow-inner bg-[url('https://www.transparenttextures.com/patterns/lined-paper-2.png')] mb-6">
-<!-- ... existing code ... -->
+          <div className="min-h-screen bg-yellow-50 p-4 flex flex-col items-center py-8">
+            <div className="w-full max-w-2xl bg-white p-8 rounded-3xl shadow-xl border-4 border-yellow-300">
+              <h2 className="text-3xl font-bold text-yellow-700 mb-6 text-center">📝 ノートに 書きうつそう！</h2>
+              <p className="text-center font-bold text-gray-600 mb-6">下の えいごを、じぶんの ノートに 書いてね。<br/>書きおわったら、先生に チェックしてもらおう！</p>
+              
+              <div className="bg-[url('https://www.transparenttextures.com/patterns/lined-paper-2.png')] bg-white border-2 border-gray-300 p-6 md:p-10 rounded-xl shadow-inner mb-8">
+                {renderNoteLines(answers, false)}
+              </div>
+              
+              <button onClick={() => setStep('TEACHER_CHECK')} className="w-full bg-red-500 hover:bg-red-600 text-white text-xl font-bold py-5 rounded-2xl shadow-lg animate-pulse">🙋 先生をよぶ（チェックがめんへ）</button>
+            </div>
+          </div>
+        );
+      } else if (step === 'TEACHER_CHECK') {
+        content = (
+          <div className="min-h-screen bg-red-50 p-4 flex flex-col items-center py-8">
+            <div className="w-full max-w-2xl bg-white p-8 rounded-3xl shadow-2xl border-8 border-red-400 relative">
+              <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-2 rounded-full font-bold text-xl shadow-md">先生専用画面</div>
+              <p className="text-center font-bold text-gray-700 mt-6 mb-6">児童のノートを確認し、必要であれば以下の英文を手直ししてください。<br/>修正はスライドに反映されます。</p>
+              
+              <div className="bg-gray-50 border-2 border-gray-300 p-6 rounded-xl mb-8">
+                {renderNoteLines(answers, true)}
+              </div>
+              
+              <button onClick={() => setStep('SPEAK_PRACTICE')} className="w-full bg-green-500 text-white text-xl font-bold py-5 rounded-2xl shadow-lg">✅ チェック完了（練習へすすむ）</button>
+            </div>
+          </div>
+        );
+      } else if (step === 'SPEAK_PRACTICE') {
+        const keys = ['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'];
+        const isAllDone = currentSpeakLine >= keys.length;
+        
+        content = (
+          <div className="min-h-screen bg-green-50 p-4 flex flex-col items-center py-8">
+            <div className="w-full max-w-2xl bg-white p-8 rounded-3xl shadow-xl border-4 border-green-300 text-center">
+              <h2 className="text-3xl font-bold text-green-700 mb-6">🗣️ えいごで はなす れんしゅう</h2>
+              <div className="space-y-4 mb-8">
+                {keys.map((k, idx) => {
+                  const isActive = idx === currentSpeakLine;
+                  const isDone = idx < currentSpeakLine;
+                  const sentence = `${ITEM_LABELS[k].prefix}${answers[k].en}.`;
+                  return (
+                    <div key={k} className={`p-4 rounded-xl border-2 text-left flex justify-between items-center transition-all ${isActive ? 'bg-green-100 border-green-400 transform scale-105 shadow-md' : isDone ? 'bg-gray-100 border-gray-200 opacity-50' : 'bg-white border-gray-200 opacity-40'}`}>
+                      <span className={`text-xl md:text-2xl font-bold font-note ${isDone ? 'line-through text-gray-500' : 'text-gray-800'}`}>{idx+1}. {sentence}</span>
+                      {isActive && <button onClick={() => speak(sentence)} className="bg-white p-3 rounded-full text-green-600 shadow border border-green-200">🔊</button>}
+                      {isDone && <span className="text-green-500 text-3xl">✓</span>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {!isAllDone ? (
+                <div>
+                  <button onClick={() => startListening(`${answers[keys[currentSpeakLine]].en}`, currentSpeakLine)} disabled={isListening} className={`w-24 h-24 rounded-full shadow-lg text-4xl mb-4 ${isListening ? 'bg-red-500 animate-pulse' : 'bg-blue-500'} text-white`}>🎤</button>
+                  <p className="font-bold text-gray-600">{isListening ? "はなしてね..." : "マイクをおして はなす"}</p>
+                  {feedbackMsg && <div className="mt-4 p-4 rounded-xl font-bold text-lg border-2 bg-white">{feedbackMsg}</div>}
+                  <button onClick={() => setCurrentSpeakLine(c => c+1)} className="mt-6 text-sm text-gray-400 font-bold underline">スキップして次へ</button>
+                </div>
+              ) : (
+                <div className="animate-bounce-in">
+                  <p className="text-2xl font-bold text-orange-500 mb-6">ぜんぶ 言えたね！🎉</p>
+                  <button onClick={handleFinishAll} className="w-full bg-blue-500 text-white text-2xl font-bold py-6 rounded-2xl shadow-xl">スライドを みる！ ▶️</button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      } else if (step === 'VIEW_SLIDESHOW') {
+        const workData = viewingWork;
+        const keys = ['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'];
+        const k = keys[currentSlideIndex];
+        const sentence = `${ITEM_LABELS[k].prefix}${workData.answers[k].en}.`;
+        
+        content = (
+          <div className="fixed inset-0 bg-black flex flex-col z-50">
+            <div className="flex-1 flex items-center justify-center p-2 md:p-8">
+              <div className="w-full aspect-video max-w-5xl slide-bg rounded-xl md:rounded-3xl shadow-[0_0_50px_rgba(255,255,255,0.2)] overflow-hidden relative flex flex-col">
+                <button onClick={() => { setStep('HOME'); setViewingWork(null); }} className="absolute top-4 left-4 bg-black/50 text-white px-4 py-2 rounded-full font-bold z-10 hover:bg-black/70">✖ とじる</button>
+                <button onClick={() => speak(sentence)} className="absolute top-4 right-4 bg-blue-500 text-white w-14 h-14 rounded-full flex items-center justify-center text-2xl shadow-lg z-10 hover:bg-blue-600 border-4 border-white">🔊</button>
+                
+                <div className="flex-1 w-full bg-gray-200 relative">
+                  {workData.answers[k].img ? (
+                    <img src={workData.answers[k].img} alt="slide" onError={(e) => {e.target.src="https://placehold.co/800x600/ffeeee/ff3333?text=Error:+Cannot+load+image.\nPlease+try+another+URL.";}} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold text-2xl">がぞう は ありません</div>
+                  )}
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6 pt-20">
+                    <p className="text-white text-3xl md:text-5xl font-bold font-note drop-shadow-md">{sentence}</p>
+                    <p className="text-gray-300 text-lg md:text-xl font-bold mt-2">({workData.answers[k].ja})</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="h-24 bg-gray-900 flex justify-between items-center px-8">
+              <button onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))} className={`text-white text-4xl p-4 ${currentSlideIndex === 0 ? 'opacity-30' : 'hover:scale-110'}`}>◀</button>
+              <div className="flex gap-2">
+                {keys.map((_, i) => <div key={i} className={`w-3 h-3 rounded-full ${i === currentSlideIndex ? 'bg-white' : 'bg-gray-600'}`} />)}
+              </div>
+              <button onClick={() => setCurrentSlideIndex(Math.min(keys.length - 1, currentSlideIndex + 1))} className={`text-white text-4xl p-4 ${currentSlideIndex === keys.length - 1 ? 'opacity-30' : 'hover:scale-110'}`}>▶</button>
+            </div>
+          </div>
+        );
       } else if (step === 'VIEW_WORKSHEET' && viewingWork) {
-         content = (
-           <div className="min-h-screen bg-yellow-50 p-4 flex flex-col items-center py-12 relative">
-             <BackButton onClick={handleBack} />
-             <div className="max-w-3xl w-full mt-12 bg-white border-4 border-yellow-300 p-6 md:p-10 rounded-3xl shadow-2xl bg-[url('https://www.transparenttextures.com/patterns/lined-paper-2.png')]">
-               <h3 className="text-2xl font-bold text-yellow-700 mb-6 flex items-center border-b-2 border-yellow-200 pb-2"><span className="mr-2 text-3xl">📑</span> {viewingWork.date} のノート</h3>
-               <WorksheetLines answers={viewingWork.answers} />
-             </div>
-           </div>
-         );
-<!-- ... existing code ... -->
+        content = (
+          <div className="min-h-screen bg-yellow-50 p-4 flex flex-col items-center py-8">
+            <div className="w-full max-w-2xl bg-white p-8 rounded-3xl shadow-xl border-4 border-yellow-300 relative">
+              <button onClick={() => { setStep('HOME'); setViewingWork(null); }} className="absolute top-4 right-4 bg-gray-200 px-4 py-2 rounded-full font-bold">✖ とじる</button>
+              <h2 className="text-2xl font-bold text-gray-700 mb-6">📑 {viewingWork.date} のノート</h2>
+              <div className="bg-[url('https://www.transparenttextures.com/patterns/lined-paper-2.png')] bg-white border-2 border-gray-300 p-6 md:p-10 rounded-xl shadow-inner mb-4">
+                {renderNoteLines(viewingWork.answers, false)}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen relative font-sans touch-manipulation">
+          {content}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
