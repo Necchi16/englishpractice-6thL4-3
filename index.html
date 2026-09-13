@@ -136,16 +136,16 @@
         synth.speak(utterThis);
       }, [synth]);
 
-      // 英語テキストのクリーニング（I went to などの重複とピリオドの削除）
+      // 英語テキストのクリーニング（重複とピリオドの削除、itWasの強化）
       const cleanTrans = (text, type) => {
         if (!text) return "";
         let s = text.trim();
-        s = s.replace(/[\.\,\!]+$/, "").trim(); // 末尾のピリオドなどを削除
+        s = s.replace(/[\.\,\!]+$/, "").trim();
         if (type === 'wentTo') s = s.replace(/^i went to /i, "").replace(/^i visited /i, "");
         if (type === 'enjoyed') s = s.replace(/^i enjoyed /i, "").replace(/^i had fun /i, "");
         if (type === 'saw') s = s.replace(/^i saw /i, "").replace(/^i watched /i, "");
         if (type === 'ate') s = s.replace(/^i ate /i, "").replace(/^i had /i, "");
-        if (type === 'itWas') s = s.replace(/^it was /i, "").replace(/^they were /i, "");
+        if (type === 'itWas') s = s.replace(/^it was /i, "").replace(/^they were /i, "").replace(/^that was /i, "").replace(/^it is /i, "").replace(/^that is /i, "");
         return s.trim() || "something";
       };
 
@@ -175,13 +175,11 @@
         setFallbackMode(false);
         
         let isDone = false;
-        // 3秒でフォールバックモードへ
         const fallbackTimer = setTimeout(() => {
           if (!isDone) setFallbackMode(true);
         }, 3000);
 
         const getTrans = async (jaText, prefix, suffix, type) => {
-          // カッコ内の英語を消して日本語だけにする
           const cleanJa = jaText.replace(/\s*\(.*?\)\s*/g, ""); 
           const query = `${prefix}${cleanJa}${suffix}`;
           const enText = await translateWithGAS(query);
@@ -211,7 +209,7 @@
         } catch (err) {
           isDone = true;
           clearTimeout(fallbackTimer);
-          setFallbackMode(true); // エラー時も手動へ
+          setFallbackMode(true);
         }
       };
 
@@ -237,7 +235,7 @@
 
         recognition.onresult = (event) => {
           const trans = event.results[0][0].transcript.toLowerCase();
-          const target = targetWord.split(' ')[0].toLowerCase(); // 最初の単語で判定
+          const target = targetWord.split(' ')[0].toLowerCase();
           if (trans.includes(target) || trans.length > 10) {
             setFeedbackMsg("Good! 👏");
             setTimeout(() => {
@@ -262,7 +260,6 @@
         setCurrentSlideIndex(0);
       };
 
-      // 育成
       const feedKummani = () => {
         if (items.salmon >= 1) {
           const newItems = { ...items, salmon: items.salmon - 1 };
@@ -277,9 +274,8 @@
               const nextReq = KUMMANI_STAGES.find(s => s.id === kummaniLevel + 1)?.reqExp || 999;
               
               if (newExp >= nextReq) {
-                // 進化（最終形態からはコグマニに戻る、またはランダム進化）
                 let nextLevel = kummaniLevel + 1;
-                if (nextLevel > KUMMANI_STAGES.length) nextLevel = 1; // 転生
+                if (nextLevel > KUMMANI_STAGES.length) nextLevel = 1;
                 const nextStage = KUMMANI_STAGES.find(s => s.id === nextLevel);
                 
                 setFeedEffect({ phase: 'evolving', from: currentStage, to: nextStage });
@@ -391,28 +387,28 @@
           </div>
         );
       } else if (step === 'INPUT') {
-        const InputCard = ({ k }) => (
-          <div className="bg-white p-4 rounded-xl mb-4 border-2 border-pink-100 shadow-sm text-left">
-            <h3 className="font-bold text-gray-700 mb-2">{ITEM_LABELS[k].icon} {ITEM_LABELS[k].title} <span className="text-sm font-normal text-gray-500">例: {SUGGESTIONS[k][0]}</span></h3>
-            <input type="text" value={inputs[k]} onChange={e => setInputs({...inputs, [k]: e.target.value})} className="w-full p-3 border-2 border-pink-200 rounded-lg font-bold text-lg focus:outline-none focus:border-pink-400 bg-pink-50 mb-2" />
-            <div className="flex flex-wrap gap-2">
-              {SUGGESTIONS[k].map(opt => (
-                <button key={opt} onClick={() => setInputs({...inputs, [k]: opt})} className="text-xs bg-white border border-gray-300 px-3 py-1 rounded-full text-gray-600 hover:bg-pink-100">{opt}</button>
-              ))}
-            </div>
-          </div>
-        );
-
         content = (
           <div className="min-h-screen p-4 flex flex-col items-center py-8">
             <button onClick={() => setStep('HOME')} className="self-start mb-4 bg-white px-4 py-2 rounded-full shadow font-bold text-gray-600 border">◀ もどる</button>
             <div className="w-full max-w-xl text-center">
               <h2 className="text-2xl font-bold text-pink-700 mb-6 bg-pink-100 py-2 rounded-full border-2 border-pink-200">なつやすみの おもいで</h2>
-              {['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'].map(k => <InputCard key={k} k={k} />)}
+              
+              {/* 入力欄（再描画を防ぐため、コンポーネント内に直接記述） */}
+              {['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'].map(k => (
+                <div key={k} className="bg-white p-4 rounded-xl mb-4 border-2 border-pink-100 shadow-sm text-left">
+                  <h3 className="font-bold text-gray-700 mb-2">{ITEM_LABELS[k].icon} {ITEM_LABELS[k].title} <span className="text-sm font-normal text-gray-500">例: {SUGGESTIONS[k][0]}</span></h3>
+                  <input type="text" value={inputs[k]} onChange={e => setInputs({...inputs, [k]: e.target.value})} className="w-full p-3 border-2 border-pink-200 rounded-lg font-bold text-lg focus:outline-none focus:border-pink-400 bg-pink-50 mb-2" />
+                  <div className="flex flex-wrap gap-2">
+                    {SUGGESTIONS[k].map(opt => (
+                      <button key={opt} onClick={() => setInputs({...inputs, [k]: opt})} className="text-xs bg-white border border-gray-300 px-3 py-1 rounded-full text-gray-600 hover:bg-pink-100">{opt}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
               
               {fallbackMode ? (
                 <div className="bg-red-50 p-6 rounded-2xl border-4 border-red-300 mt-6 animate-fade-in-up">
-                  <h3 className="font-bold text-red-700 text-lg mb-2">うまく ほんやく できませんでした💦</h3>
+                  <h3 className="font-bold text-red-700 text-lg mb-2">もし、ほんやくが ずっとできないままだったら💦</h3>
                   <p className="text-sm text-gray-700 mb-4 font-bold">Googleほんやくを ひらいて、じぶんで えいごに してみよう！</p>
                   <a href="https://translate.google.co.jp/?sl=ja&tl=en" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-500 text-white font-bold py-2 px-6 rounded-full mb-6">🌐 Googleほんやく をひらく</a>
                   
@@ -553,9 +549,10 @@
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold text-2xl">がぞう は ありません</div>
                   )}
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6 pt-20">
-                    <p className="text-white text-3xl md:text-5xl font-bold font-note drop-shadow-md">{sentence}</p>
-                    <p className="text-gray-300 text-lg md:text-xl font-bold mt-2">({workData.answers[k].ja})</p>
+                  {/* スライド下部のテキストエリア（パディングを増やして文字切れを防止） */}
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/60 to-transparent p-6 pt-24 pb-12 md:pb-16">
+                    <p className="text-white text-3xl md:text-5xl font-bold font-note drop-shadow-md leading-tight">{sentence}</p>
+                    <p className="text-gray-300 text-lg md:text-xl font-bold mt-3">({workData.answers[k].ja})</p>
                   </div>
                 </div>
               </div>
