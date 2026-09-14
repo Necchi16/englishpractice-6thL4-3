@@ -53,7 +53,6 @@
       itWas: { icon: '💭', title: 'どんな かんそう（気持ち）？', enHint: '(It was)', prefix: 'It was ' }
     };
 
-    // ランダム進化用の配列
     const KUMMANI_STAGES = [
       { id: 1, name: "コグマニ", emoji: "🧸", reqExp: 0 },
       { id: 2, name: "クッマーニ", emoji: "🐻", reqExp: 3 },
@@ -85,13 +84,14 @@
       const [kummaniExp, setKummaniExp] = useState(0);
       
       const [inputs, setInputs] = useState({ wentTo: '', enjoyed: '', saw: '', ate: '', itWas: '' });
-      const [answers, setAnswers] = useState(null);
+      const [answers, setAnswers] = useState({});
+      const [translatingState, setTranslatingState] = useState({});
+      const [fallbackMode, setFallbackMode] = useState({});
+      const [manualInputs, setManualInputs] = useState({});
+      
       const [savedWorks, setSavedWorks] = useState([]);
       const [viewingWork, setViewingWork] = useState(null);
       const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-
-      const [isTranslating, setIsTranslating] = useState(false);
-      const [fallbackMode, setFallbackMode] = useState(false);
 
       const [currentSpeakLine, setCurrentSpeakLine] = useState(0);
       const [isListening, setIsListening] = useState(false);
@@ -137,11 +137,12 @@
         synth.speak(utterThis);
       }, [synth]);
 
-      // 英語テキストのクリーニング（重複とピリオドの削除、itWasの強化）
+      // 英語テキストのクリーニング
       const cleanTrans = (text, type) => {
         if (!text) return "";
         let s = text.trim();
-        s = s.replace(/[\.\,\!]+$/, "").trim();
+        s = s.replace(/[\.\,\!]+$/, "").trim(); // 末尾のピリオドを削除
+        s = s.toLowerCase(); // 小文字化して統一
         if (type === 'wentTo') s = s.replace(/^i went to /i, "").replace(/^i visited /i, "");
         if (type === 'enjoyed') s = s.replace(/^i enjoyed /i, "").replace(/^i had fun /i, "");
         if (type === 'saw') s = s.replace(/^i saw /i, "").replace(/^i watched /i, "");
@@ -150,114 +151,85 @@
         return s.trim() || "something";
       };
 
+      const capitalizeFirstLetter = (string) => {
+        return string.charAt(0).toUpperCase() + string.slice(1);
+      };
+
+      // 安全な翻訳通信処理
       const translateWithGAS = async (text) => {
         const urls = [...GAS_URLS].sort(() => 0.5 - Math.random());
         for (const url of urls) {
           try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
-            const res = await fetch(`${url}?text=${encodeURIComponent(text)}`, { signal: controller.signal });
-            clearTimeout(timeoutId);
+            // Promise.raceを使用して、10秒経過したら強制的にタイムアウトエラーにする
+            const res = await Promise.race([
+              fetch(`${url}?text=${encodeURIComponent(text)}`),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
+            ]);
+            
+            if (!res.ok) continue;
+            
             const textData = await res.text();
             try {
               const data = JSON.parse(textData);
               if (data && data.text) return data.text.toLowerCase();
-            } catch (jsonErr) {
-              console.warn("GAS JSON parse error");
+            } catch (e) {
+              console.warn("GAS returned non-JSON response.");
             }
           } catch (e) {
             console.warn("GAS translation failed, trying next...");
           }
         }
         
-        // GASがすべてダメなら、Googleの無料翻訳API（フォールバック）を使用する
-        try {
-          const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=en&dt=t&q=${encodeURIComponent(text)}`);
-          const data = await res.json();
-          if (data && data[0] && data[0][0] && data[0][0][0]) {
-            return data[0][0][0].toLowerCase();
-          }
-        } catch(e) {
-          console.warn("Google API fallback error", e);
-        }
-
-        throw new Error("All translation methods failed");
+        // GASが全滅した場合はGoogleの無料APIを直接叩く
+        console.warn("Falling back to Google Translate API...");
+        const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=en&dt=t&q=${encodeURIComponent(text)}`);
+        const data = await res.json();
+        return data[0][0][0].toLowerCase();
       };
 
-      const handleTranslateAll = async () => {
-        if (!inputs.wentTo.trim() || !inputs.enjoyed.trim() || !inputs.saw.trim() || !inputs.ate.trim() || !inputs.itWas.trim()) {
-          alert("５つ すべて にゅうりょく してね！");
+      const handleTranslateSingle = async (k) => {
+        if (!inputs[k].trim()) {
+          alert("にゅうりょく してね！");
           return;
         }
-        setIsTranslating('TRANSLATING');
-        setFallbackMode(false);
+        setTranslatingState(prev => ({ ...prev, [k]: true }));
+        setFallbackMode(prev => ({ ...prev, [k]: false }));
         
-        let isDone = false;
-        let isTimeout = false;
-        // 全体を諦める時間を10秒に延長（GASのスリープ復帰を待つため）
-        const fallbackTimer = setTimeout(() => {
-          if (!isDone) {
-            isTimeout = true;
-            setFallbackMode(true);
-            setIsTranslating(false);
-          }
-        }, 10000);
-
-        const getTrans = async (jaText, prefix, suffix, type) => {
-          const cleanJa = jaText.replace(/\s*\(.*?\)\s*/g, ""); 
-          const query = `${prefix}${cleanJa}${suffix}`;
-          const enText = await translateWithGAS(query);
-          return cleanTrans(enText, type);
-        };
+        let prefix = "私は";
+        let suffix = "に行きました。";
+        if (k === 'enjoyed') suffix = "を楽しみました。";
+        if (k === 'saw') suffix = "を見ました。";
+        if (k === 'ate') suffix = "を食べました。";
+        if (k === 'itWas') { prefix = "それは"; suffix = "でした。"; }
+        
+        const cleanJa = inputs[k].replace(/\s*\(.*?\)\s*/g, ""); 
+        const query = `${prefix}${cleanJa}${suffix}`;
 
         try {
-          const w = await getTrans(inputs.wentTo, "私は", "に行きました。", "wentTo");
-          const e = await getTrans(inputs.enjoyed, "私は", "を楽しみました。", "enjoyed");
-          const s = await getTrans(inputs.saw, "私は", "を見ました。", "saw");
-          const a = await getTrans(inputs.ate, "私は", "を食べました。", "ate");
-          const i = await getTrans(inputs.itWas, "それは", "でした。", "itWas");
-
-          if (isTimeout) return; // 既にタイムアウトして手動入力画面になっていたら何もしない
-
-          isDone = true;
-          clearTimeout(fallbackTimer);
-          
-          setAnswers({
-            wentTo: { ja: inputs.wentTo, en: w, img: "" },
-            enjoyed: { ja: inputs.enjoyed, en: e, img: "" },
-            saw: { ja: inputs.saw, en: s, img: "" },
-            ate: { ja: inputs.ate, en: a, img: "" },
-            itWas: { ja: inputs.itWas, en: i, img: "" }
-          });
-          
-          // 翻訳成功の演出をしてから自動的に切り替える
-          setIsTranslating('SUCCESS');
-          setTimeout(() => {
-            setFallbackMode(false);
-            setIsTranslating(false);
-            setStep('IMAGE_INPUT');
-          }, 1200); // 1.2秒後に自動遷移
-
+          const enText = await translateWithGAS(query);
+          const cleaned = cleanTrans(enText, k);
+          setAnswers(prev => ({ ...prev, [k]: { ja: inputs[k], en: cleaned, img: "" } }));
+          setTranslatingState(prev => ({ ...prev, [k]: false }));
         } catch (err) {
-          if (isTimeout) return;
-          isDone = true;
-          clearTimeout(fallbackTimer);
-          setFallbackMode(true);
-          setIsTranslating(false);
+          setFallbackMode(prev => ({ ...prev, [k]: true }));
+          setTranslatingState(prev => ({ ...prev, [k]: false }));
         }
       };
 
-      const handleManualTranslateComplete = () => {
-        setAnswers({
-          wentTo: { ja: inputs.wentTo, en: cleanTrans(inputs.wentToEn, 'wentTo'), img: "" },
-          enjoyed: { ja: inputs.enjoyed, en: cleanTrans(inputs.enjoyedEn, 'enjoyed'), img: "" },
-          saw: { ja: inputs.saw, en: cleanTrans(inputs.sawEn, 'saw'), img: "" },
-          ate: { ja: inputs.ate, en: cleanTrans(inputs.ateEn, 'ate'), img: "" },
-          itWas: { ja: inputs.itWas, en: cleanTrans(inputs.itWasEn, 'itWas'), img: "" }
-        });
-        setFallbackMode(false);
-        setIsTranslating(false);
-        setStep('IMAGE_INPUT');
+      const copyToClipboard = (text) => {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          alert('コピーしました！Googleほんやく に はりつけてね。');
+        } catch (err) {
+          alert('コピーにしっぱいしました。');
+        }
+        document.body.removeChild(textArea);
       };
 
       const startListening = (targetWord, index) => {
@@ -269,8 +241,8 @@
 
         recognition.onresult = (event) => {
           const trans = event.results[0][0].transcript.toLowerCase();
-          const target = targetWord.split(' ')[0].toLowerCase();
-          if (trans.includes(target) || trans.length > 10) {
+          const target = targetWord.split(' ')[0].toLowerCase(); // 最初の単語で判定
+          if (trans.includes(target) || trans.length > 10) { // 長い文言は救済措置
             setFeedbackMsg("Good! 👏");
             setFailCount(0);
             setTimeout(() => {
@@ -278,11 +250,15 @@
               setCurrentSpeakLine(c => c + 1);
             }, 1500);
           } else {
-            setFeedbackMsg("おしい！もう一度！\n(" + trans + " と聞こえました)");
             setFailCount(c => c + 1);
+            setFeedbackMsg("おしい！もう一度！\n(" + trans + " と聞こえました)");
           }
         };
-        recognition.onerror = () => { setFeedbackMsg("エラーがおきました。もう一度ボタンをおしてね。"); setIsListening(false); setFailCount(c => c + 1); };
+        recognition.onerror = () => { 
+          setFailCount(c => c + 1);
+          setFeedbackMsg("エラーがおきました。もう一度ボタンをおしてね。"); 
+          setIsListening(false); 
+        };
         recognition.onend = () => setIsListening(false);
         recognition.start();
       };
@@ -294,6 +270,12 @@
         setViewingWork(workData);
         setStep('VIEW_SLIDESHOW');
         setCurrentSlideIndex(0);
+      };
+
+      const buySalmon = () => {
+        if (totalCoins >= 10) {
+          saveProgress(totalCoins - 10, { ...items, salmon: (items.salmon || 0) + 1 }, kummaniLevel, kummaniExp);
+        }
       };
 
       const feedKummani = () => {
@@ -379,7 +361,7 @@
                 <h1 className="text-3xl md:text-4xl font-extrabold drop-shadow-md">おもいで スライドをつくろう！</h1>
               </div>
               <div className="p-6 text-center">
-                <button onClick={() => { setInputs({wentTo:'', enjoyed:'', saw:'', ate:'', itWas:''}); setStep('INPUT'); }} className="w-full bg-red-500 hover:bg-red-600 text-white text-2xl font-bold py-6 rounded-2xl shadow-lg transform transition hover:scale-105 mb-8">
+                <button onClick={() => { setInputs({wentTo:'', enjoyed:'', saw:'', ate:'', itWas:''}); setAnswers({}); setTranslatingState({}); setFallbackMode({}); setManualInputs({}); setStep('INPUT'); }} className="w-full bg-red-500 hover:bg-red-600 text-white text-2xl font-bold py-6 rounded-2xl shadow-lg transform transition hover:scale-105 mb-8">
                   ▶️ あたらしく つくる！
                 </button>
                 
@@ -403,8 +385,15 @@
                 <div className="border-t-4 border-dashed border-gray-200 pt-6">
                   <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold text-gray-700">🐻 クッマーニの おせわ</h2>
-                    <div className="bg-yellow-100 text-yellow-800 font-bold px-4 py-1 rounded-full border-2 border-yellow-300">🐟 シャケ: {items.salmon} / 🪙 {totalCoins}</div>
+                    <div className="bg-yellow-100 text-yellow-800 font-bold px-4 py-1 rounded-full border-2 border-yellow-300">🪙 {totalCoins} コイン / 🐟 シャケ: {items.salmon}</div>
                   </div>
+                  
+                  <div className="flex justify-center mb-4">
+                     <button onClick={buySalmon} disabled={totalCoins < 10} className={`py-2 px-6 rounded-xl font-bold shadow text-sm transition ${totalCoins >= 10 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}>
+                        🐟 シャケを買う (10コイン)
+                     </button>
+                  </div>
+
                   <div className="bg-blue-50 p-6 rounded-2xl border-2 border-blue-100 flex flex-col items-center relative">
                     <div className="text-7xl mb-2 drop-shadow-md">{currentStage.emoji}</div>
                     <div className="font-bold text-blue-800 mb-2">{currentStage.name} (Lv.{currentStage.id})</div>
@@ -423,45 +412,88 @@
           </div>
         );
       } else if (step === 'INPUT') {
+        const isAllTranslated = ['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'].every(k => answers && answers[k] && answers[k].ja === inputs[k]);
+
+        const InputCard = ({ k }) => (
+          <div className="bg-white p-4 md:p-6 rounded-2xl mb-6 border-4 border-pink-100 shadow-md text-left">
+            <h3 className="font-bold text-gray-700 mb-3 text-lg flex items-center">{ITEM_LABELS[k].icon} {ITEM_LABELS[k].title} <span className="text-sm font-normal text-gray-500 ml-2">例: {SUGGESTIONS[k][0]}</span></h3>
+            
+            <input type="text" value={inputs[k]} onChange={e => {
+                setInputs({...inputs, [k]: e.target.value});
+                if (answers && answers[k]) {
+                   setAnswers(prev => { const newAns = {...prev}; delete newAns[k]; return newAns; });
+                }
+                setFallbackMode(prev => ({ ...prev, [k]: false }));
+              }} className="w-full p-4 border-2 border-pink-200 rounded-xl font-bold text-xl focus:outline-none focus:border-pink-400 bg-pink-50 mb-3 transition-colors" />
+            
+            <div className="flex flex-wrap gap-2 mb-4">
+              {SUGGESTIONS[k].map(opt => (
+                <button key={opt} onClick={() => {
+                  setInputs({...inputs, [k]: opt});
+                  if (answers && answers[k]) {
+                     setAnswers(prev => { const newAns = {...prev}; delete newAns[k]; return newAns; });
+                  }
+                  setFallbackMode(prev => ({ ...prev, [k]: false }));
+                }} className="text-sm bg-white border border-gray-300 px-3 py-1.5 rounded-full text-gray-600 hover:bg-pink-100 transition-colors">{opt}</button>
+              ))}
+            </div>
+
+            {answers && answers[k] && answers[k].ja === inputs[k] ? (
+              <div className="bg-green-50 p-4 rounded-xl border-2 border-green-200 mt-4 animate-fade-in-up">
+                <p className="text-sm text-green-700 font-bold mb-1">✨ ほんやく できました！</p>
+                <p className="text-xl md:text-2xl font-bold font-note text-gray-800">{ITEM_LABELS[k].prefix}<span className="text-blue-600 underline decoration-2">{capitalizeFirstLetter(answers[k].en)}</span>.</p>
+              </div>
+            ) : translatingState[k] ? (
+              <div className="bg-blue-50 p-4 rounded-xl border-2 border-blue-200 mt-4 text-center">
+                <p className="text-blue-700 font-bold animate-pulse text-lg mb-2">⏳ ほんやく中...</p>
+                <p className="text-sm text-gray-600">ほんやくしている間に、ほかの文章を考えよう！💡</p>
+              </div>
+            ) : fallbackMode[k] ? (
+              <div className="bg-red-50 p-5 rounded-xl border-2 border-red-300 mt-4 animate-fade-in-up">
+                <h4 className="font-bold text-red-700 mb-3">もし、ほんやくが ずっとできないままだったら💦</h4>
+                
+                <button onClick={() => handleTranslateSingle(k)} className="w-full mb-4 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold py-3 rounded-lg shadow-sm transition">
+                   🔄 もういちど ほんやく をためす
+                </button>
+                
+                <p className="text-sm text-gray-700 mb-4 border-t border-red-200 pt-3">それでもダメなら、Googleほんやくを ひらいて えいごに してみよう！</p>
+                <div className="flex justify-between items-center bg-white p-3 rounded-lg border border-gray-200 mb-4">
+                  <span className="font-bold text-gray-700">{inputs[k]}</span>
+                  <button onClick={() => copyToClipboard(inputs[k])} className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-1.5 px-4 rounded shadow-sm">📋 コピーする</button>
+                </div>
+                
+                <a href="https://translate.google.co.jp/?sl=ja&tl=en" target="_blank" rel="noopener noreferrer" className="block text-center bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg mb-4 shadow-sm transition">🌐 Googleほんやく をひらく</a>
+                
+                <p className="text-sm font-bold text-gray-600 mb-2">えいごを ここに はりつけ↓</p>
+                <input type="text" value={manualInputs[k] || ''} onChange={e => setManualInputs({...manualInputs, [k]: e.target.value})} className="w-full p-3 border-2 border-gray-300 rounded-lg focus:bg-white bg-gray-50 mb-3 font-bold" />
+                <button onClick={() => {
+                  if(!manualInputs[k]) return;
+                  setAnswers(prev => ({ ...prev, [k]: { ja: inputs[k], en: cleanTrans(manualInputs[k], k), img: "" } }));
+                  setFallbackMode(prev => ({ ...prev, [k]: false }));
+                }} className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg shadow-sm">けってい！</button>
+              </div>
+            ) : (
+              <button onClick={() => handleTranslateSingle(k)} className="w-full mt-2 bg-pink-500 hover:bg-pink-600 text-white text-lg font-bold py-4 rounded-xl shadow-md transition transform hover:-translate-y-1">
+                えいごに ほんやく！
+              </button>
+            )}
+          </div>
+        );
+
         content = (
           <div className="min-h-screen p-4 flex flex-col items-center py-8">
             <button onClick={() => setStep('HOME')} className="self-start mb-4 bg-white px-4 py-2 rounded-full shadow font-bold text-gray-600 border">◀ もどる</button>
-            <div className="w-full max-w-xl text-center">
+            <div className="w-full max-w-xl text-center pb-24">
               <h2 className="text-2xl font-bold text-pink-700 mb-6 bg-pink-100 py-2 rounded-full border-2 border-pink-200">なつやすみの おもいで</h2>
               
-              {/* 入力欄（再描画を防ぐため、コンポーネント内に直接記述） */}
-              {['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'].map(k => (
-                <div key={k} className="bg-white p-4 rounded-xl mb-4 border-2 border-pink-100 shadow-sm text-left">
-                  <h3 className="font-bold text-gray-700 mb-2">{ITEM_LABELS[k].icon} {ITEM_LABELS[k].title} <span className="text-sm font-normal text-gray-500">例: {SUGGESTIONS[k][0]}</span></h3>
-                  <input type="text" value={inputs[k]} onChange={e => setInputs({...inputs, [k]: e.target.value})} className="w-full p-3 border-2 border-pink-200 rounded-lg font-bold text-lg focus:outline-none focus:border-pink-400 bg-pink-50 mb-2" />
-                  <div className="flex flex-wrap gap-2">
-                    {SUGGESTIONS[k].map(opt => (
-                      <button key={opt} onClick={() => setInputs({...inputs, [k]: opt})} className="text-xs bg-white border border-gray-300 px-3 py-1 rounded-full text-gray-600 hover:bg-pink-100">{opt}</button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+              {['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'].map(k => <InputCard key={k} k={k} />)}
               
-              {fallbackMode ? (
-                <div className="bg-red-50 p-6 rounded-2xl border-4 border-red-300 mt-6 animate-fade-in-up">
-                  <h3 className="font-bold text-red-700 text-lg mb-2">もし、ほんやくが ずっとできないままだったら💦</h3>
-                  <p className="text-sm text-gray-700 mb-4 font-bold">Googleほんやくを ひらいて、じぶんで えいごに してみよう！</p>
-                  <a href="https://translate.google.co.jp/?sl=ja&tl=en" target="_blank" rel="noopener noreferrer" className="inline-block bg-blue-500 text-white font-bold py-2 px-6 rounded-full mb-6">🌐 Googleほんやく をひらく</a>
-                  
-                  <div className="space-y-4 text-left">
-                    {['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'].map(k => (
-                      <div key={k}>
-                        <p className="text-sm font-bold text-gray-600">「{inputs[k]}」→ えいごで？</p>
-                        <input type="text" value={inputs[k+'En'] || ''} onChange={e => setInputs({...inputs, [k+'En']: e.target.value})} className="w-full p-2 border-2 border-gray-300 rounded focus:bg-white bg-gray-50" />
-                      </div>
-                    ))}
-                  </div>
-                  <button onClick={handleManualTranslateComplete} className="w-full mt-6 bg-green-500 text-white font-bold py-4 rounded-xl shadow-lg">えいごを いれたよ！</button>
+              {isAllTranslated && (
+                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur border-t-2 border-pink-100 flex justify-center shadow-[0_-10px_20px_rgba(0,0,0,0.05)] z-40">
+                  <button onClick={() => setStep('IMAGE_INPUT')} className="w-full max-w-xl bg-blue-500 hover:bg-blue-600 text-white text-2xl font-bold py-5 rounded-2xl shadow-lg transition transform hover:scale-105 animate-bounce-in">
+                    つぎへ すすむ！ ▶️
+                  </button>
                 </div>
-              ) : (
-                <button onClick={handleTranslateAll} disabled={isTranslating !== false} className={`w-full mt-6 text-white text-xl font-bold py-5 rounded-2xl shadow-lg transition ${isTranslating === 'SUCCESS' ? 'bg-green-500' : 'bg-pink-500 hover:bg-pink-600'}`}>
-                  {isTranslating === 'TRANSLATING' ? '⏳ ほんやく中...' : isTranslating === 'SUCCESS' ? '✨ ほんやく完了！' : 'えいごに ほんやく！'}
-                </button>
               )}
             </div>
           </div>
@@ -539,7 +571,7 @@
                 {keys.map((k, idx) => {
                   const isActive = idx === currentSpeakLine;
                   const isDone = idx < currentSpeakLine;
-                  const sentence = `${ITEM_LABELS[k].prefix}${answers[k].en}.`;
+                  const sentence = capitalizeFirstLetter(`${ITEM_LABELS[k].prefix}${answers[k].en}.`);
                   return (
                     <div key={k} className={`p-4 rounded-xl border-2 text-left flex justify-between items-center transition-all ${isActive ? 'bg-green-100 border-green-400 transform scale-105 shadow-md' : isDone ? 'bg-gray-100 border-gray-200 opacity-50' : 'bg-white border-gray-200 opacity-40'}`}>
                       <span className={`text-xl md:text-2xl font-bold font-note ${isDone ? 'line-through text-gray-500' : 'text-gray-800'}`}>{idx+1}. {sentence}</span>
@@ -554,9 +586,9 @@
                 <div>
                   <button onClick={() => startListening(`${answers[keys[currentSpeakLine]].en}`, currentSpeakLine)} disabled={isListening} className={`w-24 h-24 rounded-full shadow-lg text-4xl mb-4 ${isListening ? 'bg-red-500 animate-pulse' : 'bg-blue-500'} text-white`}>🎤</button>
                   <p className="font-bold text-gray-600">{isListening ? "はなしてね..." : "マイクをおして はなす"}</p>
-                  {feedbackMsg && <div className="mt-4 p-4 rounded-xl font-bold text-lg border-2 bg-white whitespace-pre-line">{feedbackMsg}</div>}
+                  {feedbackMsg && <div className="mt-4 p-4 rounded-xl font-bold text-lg border-2 bg-white">{feedbackMsg}</div>}
                   {failCount >= 1 && (
-                    <button onClick={() => { setCurrentSpeakLine(c => c+1); setFailCount(0); setFeedbackMsg(""); }} className="mt-6 text-sm text-gray-400 font-bold underline p-2 hover:bg-gray-50 rounded">スキップして次へ</button>
+                    <button onClick={() => { setCurrentSpeakLine(c => c+1); setFailCount(0); setFeedbackMsg(""); }} className="mt-6 text-sm text-gray-500 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-full font-bold transition">スキップして次へ ⏭️</button>
                   )}
                 </div>
               ) : (
@@ -572,36 +604,43 @@
         const workData = viewingWork;
         const keys = ['wentTo', 'enjoyed', 'saw', 'ate', 'itWas'];
         const k = keys[currentSlideIndex];
-        const sentence = `${ITEM_LABELS[k].prefix}${workData.answers[k].en}.`;
+        const sentence = capitalizeFirstLetter(`${ITEM_LABELS[k].prefix}${workData.answers[k].en}.`);
         
         content = (
           <div className="fixed inset-0 bg-black flex flex-col z-50">
-            <div className="flex-1 flex items-center justify-center p-2 md:p-8 overflow-hidden">
-              <div 
-                className="w-full slide-bg rounded-xl md:rounded-3xl shadow-[0_0_50px_rgba(255,255,255,0.2)] overflow-hidden relative flex flex-col mx-auto"
-                style={{ aspectRatio: '16/9', maxHeight: '100%', maxWidth: '100%' }}
-              >
-                <button onClick={() => { setStep('HOME'); setViewingWork(null); }} className="absolute top-4 left-4 bg-black/50 text-white px-4 py-2 rounded-full font-bold z-20 hover:bg-black/70">✖ とじる</button>
-                <button onClick={() => speak(sentence)} className="absolute top-4 right-4 bg-blue-500 text-white w-14 h-14 rounded-full flex items-center justify-center text-2xl shadow-lg z-20 hover:bg-blue-600 border-4 border-white">🔊</button>
+            {/* スライド本体エリア（余白を設けてはみ出さないように設計） */}
+            <div className="flex-1 flex items-center justify-center p-2 md:p-6 overflow-hidden min-h-0">
+              <div className="w-full h-full max-w-6xl rounded-xl md:rounded-3xl overflow-hidden relative flex flex-col bg-gray-900 border-4 border-gray-800 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
                 
-                <div className="flex-1 w-full bg-gray-200 relative">
-                  {workData.answers[k].img ? (
-                    <img src={workData.answers[k].img} alt="slide" onError={(e) => {e.target.src="https://placehold.co/800x600/ffeeee/ff3333?text=Error:+Cannot+load+image.\nPlease+try+another+URL.";}} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold text-2xl">がぞう は ありません</div>
-                  )}
-                  {/* スライド下部のテキストエリア */}
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/70 to-transparent p-4 md:p-6 pt-24 pb-8 md:pb-12">
-                    <p className="text-white text-2xl md:text-4xl lg:text-5xl font-bold font-note drop-shadow-md leading-tight">{sentence}</p>
-                    <p className="text-gray-300 text-base md:text-xl font-bold mt-2 md:mt-3">({workData.answers[k].ja})</p>
-                  </div>
+                <button onClick={() => { setStep('HOME'); setViewingWork(null); }} className="absolute top-4 left-4 bg-black/70 text-white px-4 py-2 rounded-full font-bold z-20 hover:bg-black/90 border border-gray-600 backdrop-blur">✖ とじる</button>
+                <button onClick={() => speak(sentence)} className="absolute top-4 right-4 bg-blue-500/90 text-white w-14 h-14 rounded-full flex items-center justify-center text-2xl shadow-lg z-20 hover:bg-blue-600 border-2 border-white backdrop-blur">🔊</button>
+                
+                {/* 画像（object-containで絶対に画面内に収める） */}
+                {workData.answers[k].img ? (
+                  <img src={workData.answers[k].img} alt="slide" onError={(e) => {e.target.src="https://placehold.co/800x600/222222/ff3333?text=Error:+Cannot+load+image.\nPlease+try+another+URL.";}} className="absolute inset-0 w-full h-full object-contain" />
+                ) : (
+                  <div className="absolute inset-0 w-full h-full flex items-center justify-center text-gray-500 font-bold text-2xl">がぞう は ありません</div>
+                )}
+                
+                {/* スライド下部のテキストエリア（pointer-events-noneで邪魔にならないようにし、z-indexで必ず手前に） */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent px-4 pt-32 pb-8 md:pb-12 flex flex-col items-center text-center z-10 pointer-events-none">
+                  <p className="text-white text-3xl md:text-5xl font-bold font-note drop-shadow-lg leading-tight mb-2">{sentence}</p>
+                  <p className="text-gray-300 text-lg md:text-2xl font-bold drop-shadow-md">({workData.answers[k].ja})</p>
                 </div>
               </div>
             </div>
             
-            <div className="h-20 md:h-24 bg-gray-900 flex justify-between items-center px-4 md:px-8 shrink-0">
-              <button onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))} className={`text-white text-3xl md:text-4xl p-2 md:p-4 ${currentSlideIndex === 0 ? 'opacity-30' : 'hover:scale-110'}`}>◀</button>
-              <button onClick={() => setCurrentSlideIndex(Math.min(keys.length - 1, currentSlideIndex + 1))} className={`text-white text-4xl p-4 ${currentSlideIndex === keys.length - 1 ? 'opacity-30' : 'hover:scale-110'}`}>▶</button>
+            {/* コントロールバー（固定の高さで画面下に配置） */}
+            <div className="h-20 bg-gray-950 flex justify-between items-center px-4 md:px-12 shrink-0 border-t border-gray-800">
+              <button onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))} className={`text-white text-3xl md:text-4xl p-2 md:p-4 transition ${currentSlideIndex === 0 ? 'opacity-30 cursor-not-allowed' : 'hover:scale-110 active:scale-95'}`}>◀</button>
+              
+              <div className="flex gap-3">
+                {keys.map((_, i) => (
+                  <div key={i} className={`w-3 h-3 md:w-4 md:h-4 rounded-full transition-colors ${i === currentSlideIndex ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : 'bg-gray-700'}`} />
+                ))}
+              </div>
+
+              <button onClick={() => setCurrentSlideIndex(Math.min(keys.length - 1, currentSlideIndex + 1))} className={`text-white text-3xl md:text-4xl p-2 md:p-4 transition ${currentSlideIndex === keys.length - 1 ? 'opacity-30 cursor-not-allowed' : 'hover:scale-110 active:scale-95'}`}>▶</button>
             </div>
           </div>
         );
