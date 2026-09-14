@@ -189,13 +189,18 @@
           alert("５つ すべて にゅうりょく してね！");
           return;
         }
-        setIsTranslating(true);
+        setIsTranslating('TRANSLATING');
         setFallbackMode(false);
         
         let isDone = false;
+        let isTimeout = false;
         // 全体を諦める時間を10秒に延長（GASのスリープ復帰を待つため）
         const fallbackTimer = setTimeout(() => {
-          if (!isDone) setFallbackMode(true);
+          if (!isDone) {
+            isTimeout = true;
+            setFallbackMode(true);
+            setIsTranslating(false);
+          }
         }, 10000);
 
         const getTrans = async (jaText, prefix, suffix, type) => {
@@ -212,6 +217,8 @@
           const a = await getTrans(inputs.ate, "私は", "を食べました。", "ate");
           const i = await getTrans(inputs.itWas, "それは", "でした。", "itWas");
 
+          if (isTimeout) return; // 既にタイムアウトして手動入力画面になっていたら何もしない
+
           isDone = true;
           clearTimeout(fallbackTimer);
           
@@ -222,13 +229,21 @@
             ate: { ja: inputs.ate, en: a, img: "" },
             itWas: { ja: inputs.itWas, en: i, img: "" }
           });
-          setFallbackMode(false);
-          setIsTranslating(false);
-          setStep('IMAGE_INPUT');
+          
+          // 翻訳成功の演出をしてから自動的に切り替える
+          setIsTranslating('SUCCESS');
+          setTimeout(() => {
+            setFallbackMode(false);
+            setIsTranslating(false);
+            setStep('IMAGE_INPUT');
+          }, 1200); // 1.2秒後に自動遷移
+
         } catch (err) {
+          if (isTimeout) return;
           isDone = true;
           clearTimeout(fallbackTimer);
           setFallbackMode(true);
+          setIsTranslating(false);
         }
       };
 
@@ -444,8 +459,8 @@
                   <button onClick={handleManualTranslateComplete} className="w-full mt-6 bg-green-500 text-white font-bold py-4 rounded-xl shadow-lg">えいごを いれたよ！</button>
                 </div>
               ) : (
-                <button onClick={handleTranslateAll} disabled={isTranslating} className="w-full mt-6 bg-pink-500 hover:bg-pink-600 text-white text-xl font-bold py-5 rounded-2xl shadow-lg">
-                  {isTranslating ? '⏳ ほんやく中...' : 'えいごに ほんやく！'}
+                <button onClick={handleTranslateAll} disabled={isTranslating !== false} className={`w-full mt-6 text-white text-xl font-bold py-5 rounded-2xl shadow-lg transition ${isTranslating === 'SUCCESS' ? 'bg-green-500' : 'bg-pink-500 hover:bg-pink-600'}`}>
+                  {isTranslating === 'TRANSLATING' ? '⏳ ほんやく中...' : isTranslating === 'SUCCESS' ? '✨ ほんやく完了！' : 'えいごに ほんやく！'}
                 </button>
               )}
             </div>
