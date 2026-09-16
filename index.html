@@ -958,23 +958,25 @@
 
         content = (
           <div id="slide-fullscreen-container" className="fixed inset-0 bg-black flex flex-col z-50">
-            <div className="flex-1 flex flex-col items-center justify-center p-2 md:p-6 overflow-hidden min-h-0 relative">
-                
-                <button onClick={() => { 
-                  if (document.fullscreenElement) document.exitFullscreen(); 
-                  setStep('HOME'); setViewingWork(null); 
-                }} className="absolute top-4 left-4 bg-black/70 text-white px-4 py-2 rounded-full font-bold z-30 hover:bg-black/90 border border-gray-600 backdrop-blur">✖ とじる</button>
-                
-                <button onClick={toggleFullscreen} className="absolute top-5 right-20 bg-gray-600/80 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-lg z-30 hover:bg-gray-500 border-2 border-white backdrop-blur" title="全画面表示">⛶</button>
-                <button onClick={() => speak(sentence)} className="absolute top-4 right-4 bg-blue-500/90 text-white w-14 h-14 rounded-full flex items-center justify-center text-2xl shadow-lg z-30 hover:bg-blue-600 border-2 border-white backdrop-blur">🔊</button>
-                
-                <button onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))} className={`absolute left-0 top-1/2 transform -translate-y-1/2 text-white text-5xl md:text-7xl p-2 z-30 transition hover:scale-110 active:scale-95 opacity-50 hover:opacity-100 ${currentSlideIndex === 0 ? 'invisible' : ''}`}>◀</button>
-                <button onClick={() => setCurrentSlideIndex(Math.min(keys.length - 1, currentSlideIndex + 1))} className={`absolute right-0 top-1/2 transform -translate-y-1/2 text-white text-5xl md:text-7xl p-2 z-30 transition hover:scale-110 active:scale-95 opacity-50 hover:opacity-100 ${currentSlideIndex === keys.length - 1 ? 'invisible' : ''}`}>▶</button>
-                
-              <div 
-                className="w-full h-full max-w-5xl slide-bg rounded-xl md:rounded-3xl shadow-[0_0_30px_rgba(0,0,0,0.8)] overflow-hidden relative flex flex-col mx-auto bg-gray-900 border-4 border-gray-800"
-              >
-                  <div className="flex-1 w-full relative flex items-center justify-center">
+            {/* 上部ボタン類 */}
+            <button onClick={() => { 
+              if (document.fullscreenElement) document.exitFullscreen(); 
+              setStep('HOME'); setViewingWork(null); 
+            }} className="absolute top-4 left-4 bg-gray-800/80 text-white px-4 py-2 rounded-full font-bold z-40 hover:bg-gray-700 border border-gray-600 backdrop-blur">✖ とじる</button>
+            
+            <button onClick={toggleFullscreen} className="absolute top-4 right-20 bg-gray-800/80 text-white w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-lg z-40 hover:bg-gray-700 border border-gray-600 backdrop-blur" title="全画面表示">⛶</button>
+            <button onClick={() => speak(sentence)} className="absolute top-4 right-4 bg-blue-600/90 text-white w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-lg z-40 hover:bg-blue-500 border border-blue-400 backdrop-blur">🔊</button>
+            
+            {/* 左右の矢印ボタン */}
+            <button onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))} className={`absolute left-2 md:left-6 top-1/2 transform -translate-y-1/2 text-white text-5xl md:text-7xl p-2 z-40 transition hover:scale-110 active:scale-95 opacity-50 hover:opacity-100 ${currentSlideIndex === 0 ? 'invisible' : ''}`}>◀</button>
+            <button onClick={() => setCurrentSlideIndex(Math.min(keys.length - 1, currentSlideIndex + 1))} className={`absolute right-2 md:right-6 top-1/2 transform -translate-y-1/2 text-white text-5xl md:text-7xl p-2 z-40 transition hover:scale-110 active:scale-95 opacity-50 hover:opacity-100 ${currentSlideIndex === keys.length - 1 ? 'invisible' : ''}`}>▶</button>
+
+            {/* スライド本体のコンテナ（Chromebook等でも収まるようにサイズを制限） */}
+            <div className="flex-1 w-full h-full flex flex-col items-center justify-center p-4 md:p-16 relative">
+              <div className="w-full max-w-4xl h-full max-h-[75vh] flex flex-col bg-gray-900 rounded-xl md:rounded-3xl shadow-[0_0_30px_rgba(0,0,0,0.8)] overflow-hidden border-4 border-gray-800 relative z-10">
+                  
+                  {/* 画像エリア（余ったスペースを使い、はみ出さずに全体を表示） */}
+                  <div className="flex-1 min-h-0 w-full flex items-center justify-center bg-black p-2">
                     {workData.answers[k].img ? (
                       <img src={workData.answers[k].img} alt="slide" onError={(e) => {e.target.src="https://placehold.co/800x600/222222/ff3333?text=Error:+Cannot+load+image.\nPlease+try+another+URL.";}} className="w-full h-full object-contain" />
                     ) : (
@@ -982,8 +984,9 @@
                     )}
                   </div>
                   
-                  <div className="w-full bg-black px-4 py-6 md:py-8 flex flex-col items-center justify-center text-center z-10 border-t-2 border-gray-800">
-                    <p className="text-white text-xl md:text-3xl font-bold font-note drop-shadow-lg leading-tight">{sentence}</p>
+                  {/* テキストエリア（画像の下に分離して配置） */}
+                  <div className="shrink-0 w-full bg-black px-4 py-4 md:py-6 flex flex-col items-center justify-center text-center border-t-2 border-gray-800">
+                    <p className="text-white text-xl md:text-3xl font-bold font-note leading-tight">{sentence}</p>
                   </div>
               </div>
             </div>
