@@ -678,7 +678,7 @@
                     {nextStage ? (
                       <div className="w-full max-w-xs text-xs font-bold text-gray-500 text-right mb-4">つぎまで: {nextStage.reqExp - kummaniExp} EXP</div>
                     ) : (
-                      <div className="w-full max-w-xs text-xs font-bold text-orange-500 text-right mb-4">MAX LEVEL (つぎは転生)</div>
+                      <div className="w-full max-w-xs text-xs font-bold text-orange-500 text-right mb-4">MAX LEVEL (つぎはコグマニにもどる)</div>
                     )}
                     <button onClick={feedKummani} disabled={items.salmon < 1} className={`w-full py-3 rounded-xl font-bold shadow-md text-lg ${items.salmon >= 1 ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}>
                       {items.salmon >= 1 ? '🍳 おりょうりして あげる' : 'シャケが ないよ'}
